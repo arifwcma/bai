@@ -1,1 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# Data files (large, download separately)
+data/*.csv
+data/*.zip
+
+# ChromaDB local storage
+chroma_db/
+
+# Model files and checkpoints
+models/
+checkpoints/
+*.bin
+*.safetensors
+*.gguf
+
+# IDE
 .idea/
+.vscode/
+.cursor/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Environment and secrets
+.env
+*.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Misc
+info.txt
