@@ -1,0 +1,17 @@
+# Phase 1: Text-to-SQL chatbot
+psycopg2-binary
+requests
+
+# Phase 2 (later): RAG + Vector DB
+# chromadb
+# httpx
+
+# Phase 4 (later): LoRA fine-tuning
+# peft
+# transformers
+# datasets
+
+# Phase 5 (later): Predictive model
+# scikit-learn
+# xgboost
+# pandas

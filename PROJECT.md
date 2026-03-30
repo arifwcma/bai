@@ -1,70 +1,98 @@
-# UniChat — University Data Assistant
+# UniChat — GitHub Activity Assistant
 
 ## Overview
 
-Build "UniChat" — a university data assistant chatbot over the OULAD dataset in PostgreSQL, progressing through 5 phases to gain hands-on experience with text-to-SQL, RAG, vector databases, MCP, LoRA fine-tuning, and predictive ML integration. All local using Ollama + PostgreSQL + Python.
+Build a GitHub activity assistant chatbot that can answer natural language questions about GitHub events by generating SQL, retrieve information from documentation via RAG, expose tools via MCP, and optionally improve with LoRA fine-tuning. Start with a static snapshot of GH Archive data; later connect to the live GitHub API.
 
-## Background
+All local using Ollama + PostgreSQL + Python.
 
-The developer has a PhD in machine learning, strong deep learning fundamentals (NumPy, PyTorch), but limited exposure to real-world AI application development. This project is designed as a structured hands-on learning experience covering the modern AI application stack: tool use, RAG, vector databases, MCP, LoRA, and predictive model integration.
+## Purpose
+
+**Primary:** Learn real-world AI application development hands-on — tool use, RAG, vector databases, MCP, LoRA, and predictive ML integration.
+
+**Secondary:** Build a useful GitHub analytics assistant.
 
 ## Dataset
 
-**Open University Learning Analytics Dataset (OULAD)**
+**GH Archive** — https://www.gharchive.org/
 
-- Source: https://analyse.kmi.open.ac.uk/open_dataset
-- ~32,000 students, ~22 courses, ~170 assessments, 10M+ VLE interaction records
-- Tables: `studentInfo`, `courses`, `studentRegistration`, `assessments`, `studentAssessment`, `studentVle`, `vle`
-- Format: CSV files to be loaded into PostgreSQL
+- Records the entire public GitHub timeline as hourly JSON archives
+- 15+ event types: PushEvent, PullRequestEvent, IssuesEvent, WatchEvent (stars), ForkEvent, CreateEvent, IssueCommentEvent, ReleaseEvent, etc.
+- Each event contains: actor (user), repo, org, timestamp, and a type-specific payload
+- Available from 2011 to present, updated hourly
+- We start with a snapshot (a few hours/days), later connect to live GitHub API
 
 ## Tech Stack
 
 - **LLM runtime:** Ollama (local, models like `llama3.1`, `deepseek-coder-v2`, `mistral`)
 - **Embedding model:** Ollama (`nomic-embed-text` or similar)
 - **Relational DB:** PostgreSQL (already installed)
-- **Vector DB:** ChromaDB (pure Python, no admin needed) — fallback from pgvector
+- **Vector DB:** ChromaDB (pure Python, no admin needed)
 - **Language:** Python
 - **LoRA tooling:** HuggingFace `peft` + `transformers` (Phase 4)
 - **MCP:** Python `mcp` package
+- **Live API (later):** GitHub REST API via personal access token
 
 ## Architecture Mental Model
 
 ```
 LLM = reasoning/orchestration layer (Ollama)
-SQL DB = structured truth (PostgreSQL + OULAD)
+SQL DB = structured truth (PostgreSQL + GH Archive snapshot)
 Vector DB = unstructured memory/retrieval (ChromaDB)
 MCP/tools = standardized action interface
 LoRA = optional weight adaptation
-Predictive ML = separate model for risk scoring
+Predictive ML = separate model for predictions
+Live API = real-time GitHub data (future)
 ```
 
 The LLM does NOT memorize database contents. It uses tools (SQL, retrieval) at runtime.
+
+## Database Schema
+
+Normalized from raw GH Archive JSON events into relational tables:
+
+```
+actors          — GitHub users (id, login, avatar_url)
+repos           — repositories (id, name)
+orgs            — organizations (id, login)
+events          — main event table (id, type, actor_id, repo_id, org_id, created_at)
+push_events     — commits pushed (ref, size, distinct_size)
+pull_request_events — PR opened/closed/merged (action, title, state, merged, additions, deletions)
+issue_events    — issues opened/closed (action, title, state, labels)
+issue_comment_events — comments on issues/PRs (action, body)
+watch_events    — stars (action = "started")
+fork_events     — forks (fork_id, fork_full_name)
+create_events   — branches/tags/repos created (ref_type, ref)
+release_events  — releases published (action, tag_name, release_name)
+```
 
 ## Phases
 
 ### Phase 1 — Text-to-SQL Chatbot (No Training)
 
-**Goal:** Build a working chatbot that answers natural language questions by generating and executing SQL.
+**Goal:** Build a working chatbot that answers natural language questions about GitHub activity by generating and executing SQL.
 
 **Key concepts:** Tool use, prompt engineering, schema injection, "Level 1: no weight update"
 
 **Steps:**
 
-1. Download OULAD CSV files
-2. Design and create PostgreSQL schema, load data
-3. Pull a suitable Ollama model (`llama3.1` or similar with tool calling support)
-4. Build Python app:
+1. Download GH Archive hourly JSON files (start with ~3 hours, ~500K-1M events)
+2. Create PostgreSQL database `ghchat` with normalized schema
+3. Parse JSON and load into PostgreSQL tables
+4. Pull a suitable Ollama model (`llama3.1` or similar with tool calling)
+5. Build Python chatbot:
    - System prompt with schema description
    - LLM generates SQL from natural language
    - Execute SQL read-only against PostgreSQL
    - Feed results back to LLM for natural English explanation
-5. Add query classification (SQL question vs. general question)
 6. Add safety guardrails (read-only, query validation)
 7. Test with questions like:
-   - "How many students are registered in module AAA 2013J?"
-   - "What is the average score for TMA assessments?"
-   - "Which modules have the highest withdrawal rate?"
-   - "List students who scored below 40 on their first assessment"
+   - "Which repos got the most stars today?"
+   - "Top 10 users by number of push events"
+   - "How many PRs were merged vs closed without merging?"
+   - "Which programming-related repos had the most forks?"
+   - "What's the average number of commits per push?"
+   - "Show me the most active organizations"
 
 ### Phase 2 — RAG + Vector Database
 
@@ -74,15 +102,15 @@ The LLM does NOT memorize database contents. It uses tools (SQL, retrieval) at r
 
 **Steps:**
 
-1. Gather/create unstructured documents (Open University module descriptions, assessment policies, grading rules, FAQ-style content)
+1. Gather/create unstructured documents (GitHub Docs: how PRs work, what forks mean, open source licensing, contribution guidelines, GitHub Actions docs, etc.)
 2. Chunk documents, generate embeddings via Ollama (`nomic-embed-text`)
 3. Store embeddings in ChromaDB
 4. Build retrieval pipeline: query -> embed -> vector search -> top-k chunks -> LLM context
 5. Add query router: SQL path vs. RAG path vs. hybrid
 6. Test with questions like:
-   - "What is the passing threshold for a module?"
-   - "How does the credit weighting system work?"
-   - "Can a student retake an exam?"
+   - "What's the difference between a fork and a clone?"
+   - "How do GitHub Actions workflows work?"
+   - "What license should I use for my open source project?"
 
 ### Phase 3 — MCP Integration
 
@@ -93,9 +121,9 @@ The LLM does NOT memorize database contents. It uses tools (SQL, retrieval) at r
 **Steps:**
 
 1. Build MCP server in Python wrapping: `run_sql(query)`, `get_schema()`, `search_documents(query)`
-2. Connect to an MCP client (Cursor IDE or custom)
-3. Test end-to-end through MCP protocol
-4. Understand how MCP standardizes what was previously custom tool-calling code
+2. Add live GitHub API tools: `get_repo(owner, name)`, `search_repos(query)`, `get_user(login)`
+3. Connect to an MCP client (Cursor IDE or custom)
+4. Test end-to-end through MCP protocol — combining static DB data with live API calls
 
 ### Phase 4 — LoRA Fine-Tuning
 
@@ -110,32 +138,41 @@ The LLM does NOT memorize database contents. It uses tools (SQL, retrieval) at r
 3. Fine-tune a small model (e.g., `codellama-7b` or similar)
 4. Evaluate: compare SQL accuracy before vs. after LoRA
 5. Swap LoRA-adapted model into the chatbot
-6. Understand at the weight level: which layers are adapted, rank, alpha, what changes
 
 **Note:** This phase may require moving to another machine if Windows build tools are unavailable.
 
 ### Phase 5 — Predictive Model + LLM Explanation
 
-**Goal:** Train a traditional ML model for student risk prediction and integrate it with the chatbot.
+**Goal:** Train a traditional ML model for predictions and integrate it with the chatbot.
 
 **Key concepts:** Full integration pattern — separate ML model + LLM orchestration/explanation
 
 **Steps:**
 
-1. Feature engineering from OULAD data (VLE clicks, assessment scores, registration timing, demographics)
-2. Train XGBoost/random forest for dropout/failure risk prediction
+1. Feature engineering from GH Archive data (event patterns, timing, repo characteristics)
+2. Train model for predictions like: will a PR get merged? repo star growth? issue resolution time?
 3. Store predictions back in PostgreSQL
-4. Extend chatbot to query and explain risk predictions
-5. Test with: "Which students are most at risk of failing module BBB?"
+4. Extend chatbot to query and explain predictions
+5. Test with: "Which open PRs in repo X are most likely to be merged?"
+
+### Phase 6 (Bonus) — Live Data Connection
+
+**Goal:** Connect the static snapshot system to live GitHub data.
+
+**Steps:**
+
+1. Add scheduled GH Archive ingestion (download latest hours, parse, load)
+2. Connect GitHub REST API for real-time queries via MCP
+3. Compare live API results with historical DB analysis
 
 ## Project Structure
 
 ```
 bai/
-  PROJECT.md          — this file
+  PROJECT.md          — this file (project plan, progress, decisions)
   .gitignore          — git ignore rules
   requirements.txt    — Python dependencies
-  data/               — OULAD CSV files (git-ignored)
+  data/               — GH Archive JSON files (git-ignored)
   sql/                — schema creation and data loading scripts
   src/
     phase1/           — text-to-SQL chatbot
@@ -143,19 +180,20 @@ bai/
     phase3/           — MCP servers
     phase4/           — LoRA fine-tuning
     phase5/           — predictive model integration
-  docs/               — synthesized university policy documents (for RAG)
+  docs/               — GitHub documentation for RAG (Phase 2)
 ```
 
 ## Key Design Decisions
 
+- **GH Archive over other datasets** — continuously updated, globally interesting, rich relational structure, live API available for later phases
 - **ChromaDB over pgvector** — avoids admin access requirement for PostgreSQL extension installation
 - **Python MCP servers over Node.js** — avoids Node.js dependency
 - **HuggingFace peft over unsloth** — better Windows compatibility with pre-built wheels
 - **Ollama over cloud APIs** — free, local, full control, no API keys needed
-- **OULAD dataset** — real educational data, perfect match for university chatbot scenario, freely available
+- **Start with snapshot, go live later** — learn with static data first, add real-time as a final phase
 
 ## Status Log
 
 | Date | Status |
 |------|--------|
-| 2026-03-30 | Project initialized. Starting Phase 1. |
+| 2026-03-30 | Project initialized. Chose GitHub/GH Archive as dataset. Starting Phase 1 Step 1: data download and schema setup. |
